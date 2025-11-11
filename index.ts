@@ -54,3 +54,51 @@ app.get('/get/:key', async (req: Request, res: Response) => {
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
+
+const COUNTER_KEY = 'counter';
+const LIMIT = 100;
+
+app.post('/reset', async (req: Request, res: Response) => {
+  try {
+    await valkey.set(COUNTER_KEY, '0');
+    res.status(200).send('Counter reset to 0');
+  } catch (error) {
+    res.status(500).send('Error resetting counter');
+  }
+});
+
+app.post('/increment-safe', async (req: Request, res: Response) => {
+  let retries = 20; // Increase retries for very high contention
+  const requestId = Math.random().toString(36).substring(7);
+
+  while (retries > 0) {
+    const client = valkey.duplicate(); // Use connection duplication instead of creating a new instance
+    try {
+      await client.watch(COUNTER_KEY);
+      const currentValueStr = await client.get(COUNTER_KEY);
+      const currentValue = parseInt(currentValueStr || '0', 10);
+
+      if (currentValue < LIMIT) {
+        const result = await client.multi()
+          .set(COUNTER_KEY, (currentValue + 1).toString())
+          .exec();
+
+        if (result) {
+          return res.status(200).send({ counter: currentValue + 1 });
+        }
+      } else {
+        await client.unwatch();
+        return res.status(400).send({ message: 'Limit reached', counter: currentValue });
+      }
+    } catch (error) {
+      // Errors are expected during high contention, so we don't need to log them unless debugging
+      // console.error(`[${requestId}] Transaction error:`, error);
+    } finally {
+      client.quit();
+    }
+    retries--;
+    // Increase backoff time
+    await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
+  }
+  return res.status(500).send('Could not increment counter due to high contention');
+});

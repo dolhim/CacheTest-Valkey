@@ -67,6 +67,24 @@ app.post('/reset', async (req: Request, res: Response) => {
   }
 });
 
+app.post('/increment-unsafe', async (req: Request, res: Response) => {
+  try {
+    const currentValueStr = await valkey.get(COUNTER_KEY);
+    const currentValue = parseInt(currentValueStr || '0', 10);
+
+    if (currentValue < LIMIT) {
+      // Introduce a small delay to make race conditions more likely
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await valkey.set(COUNTER_KEY, (currentValue + 1).toString());
+      res.status(200).send({ counter: currentValue + 1 });
+    } else {
+      res.status(400).send({ message: 'Limit reached', counter: currentValue });
+    }
+  } catch (error) {
+    res.status(500).send('Error incrementing counter');
+  }
+});
+
 app.post('/increment-safe', async (req: Request, res: Response) => {
   let retries = 20; // Increase retries for very high contention
   const requestId = Math.random().toString(36).substring(7);

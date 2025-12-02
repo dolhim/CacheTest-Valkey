@@ -16,7 +16,7 @@
 먼저, Docker를 사용하여 Valkey 서버를 백그라운드에서 시작합니다.
 
 ```bash
-sudo docker run -d --name valkey-server -p 6379:6379 valkey/valkey
+sudo docker run -d --name valkey-server -p 6379:6379 valkey/valkey:8
 ```
 
 ### 2. 종속성 설치
